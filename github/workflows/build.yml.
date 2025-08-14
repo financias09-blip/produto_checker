@@ -1,0 +1,58 @@
+name: Build APK from repo ZIP
+
+on:
+  workflow_dispatch:  # roda manualmente
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 'stable'
+          channel: 'stable'
+          cache: true
+
+      - name: Install unzip
+        run: sudo apt-get update && sudo apt-get install -y unzip
+
+      # Descompacta QUALQUER .zip que estiver no repositório e cria estrutura do Flutter
+      - name: Unzip ZIP and create Flutter skeleton
+        run: |
+          set -e
+          mkdir -p app src_backup
+          unzip -o "*.zip" -d app
+          # guarda suas fontes originais, se existirem
+          [ -d app/lib ] && mv app/lib src_backup/
+          [ -d app/assets ] && mv app/assets src_backup/
+          [ -f app/pubspec.yaml ] && mv app/pubspec.yaml src_backup/
+          # cria projeto flutter com android/
+          cd app
+          flutter create . --platforms=android --org com.seuapp --project-name produto_checker --overwrite
+          # restaura fontes por cima do esqueleto
+          rm -rf lib assets pubspec.yaml
+          mv ../src_backup/* ./ 2>/dev/null || true
+
+      - name: Flutter pub get
+        run: flutter pub get
+        working-directory: app
+
+      - name: Build APK (debug)
+        run: flutter build apk --debug
+        working-directory: app
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: app/build/app/outputs/flutter-apk/app-debug.apk
